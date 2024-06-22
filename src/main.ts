@@ -1,5 +1,5 @@
-import { flavorEntries, flavors } from "@catppuccin/palette";
-import kaboom, { Color } from "kaboom";
+import { flavors } from "@catppuccin/palette";
+import kaboom from "kaboom";
 import { Player } from "midi-player-js"
 
 const k = kaboom({
@@ -25,30 +25,40 @@ let judgements: Judgements = {
 k.scene("game", (song: string)=>{
 	k.camPos(0,0)
 	k.setBackground(colors.base)
+  let currentHeight = 0
 
-	const player = new Player(event=>{
+	const player = new Player((event: any)=>{ //TODO: create event type
 		if (event.event !== "noteOn") return
 
+    currentHeight += 1
+
 		const note = k.add([
-			k.circle(100),
-			k.pos(1100, 0),
-			k.color(), // TODO
+			k.circle(50),
+			k.pos(1100, currentHeight * 120),
+			k.color(colors.overlay1), // TODO
 			k.move(k.LEFT, (1000 - judgementLinePadding)/noteSpeed)
 		])
 
 		note.add([
-			k.text(event.note),
+			k.text(event.noteName),
 			k.anchor("center"),
 			k.pos(50,50),
 			k.color(colors.text)
 		])
 
-		k.onKeyPress(key=>{}) // TODO
+    k.wait(70 / (1100 / noteSpeed), ()=> currentHeight -= 1)
 	})
 
-	k.onKeyPress(()=>k.add([
-		k.rect()
-	]))
+	k.onKeyPress(()=>{
+    k.add([
+      k.pos(0,0),
+      k.anchor("bot"),
+      k.rect((judgements.good / noteSpeed) * 1100 * 2, 100),
+      k.opacity(0),
+      k.fadeIn(0.2),
+      k.lifespan(0.4, {fade: 0.2})
+    ])
+  })
 
 	player.loadFile(song)
 	player.play()
