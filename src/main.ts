@@ -1,8 +1,9 @@
 import { flavors } from "@catppuccin/palette";
 import kaboom from "kaboom";
-import { Player } from "midi-player-js"
+import * as midi from "midi-player-js";
 
 const k = kaboom({
+	width: 1000,
 	scale: innerWidth / 1000,
 })
 
@@ -14,7 +15,7 @@ type Judgements = {
 	ok: number
 }
 
-let noteSpeed = 250 // ms
+let noteSpeed = 0.5 // s
 let judgementLinePadding = 100
 let judgements: Judgements = {
 	great: 10,
@@ -22,48 +23,52 @@ let judgements: Judgements = {
 	ok: 40
 }
 
-k.scene("game", (song: string)=>{
+k.scene("game", async (songFile: string)=>{
 	k.camPos(0,0)
 	k.setBackground(colors.base)
-  let currentHeight = 0
+	let currentHeight = 0
 
-	const player = new Player((event: any)=>{ //TODO: create event type
-		if (event.event !== "noteOn") return
+	const player = new midi.Player((event: midi.Event)=>{
+		if (event.name !== "Note on") return
 
-    currentHeight += 1
+		console.log(event.noteName)
 
 		const note = k.add([
-			k.circle(50),
-			k.pos(1100, currentHeight * 120),
+			k.circle(35),
+			k.pos(600, currentHeight * 70),
 			k.color(colors.overlay1), // TODO
-			k.move(k.LEFT, (1000 - judgementLinePadding)/noteSpeed)
+			k.move(k.LEFT, (1000 - judgementLinePadding)/noteSpeed),
+			k.lifespan(noteSpeed, )
 		])
 
 		note.add([
-			k.text(event.noteName),
+			k.text(event.noteName ?? "??"),
 			k.anchor("center"),
-			k.pos(50,50),
 			k.color(colors.text)
 		])
 
-    k.wait(70 / (1100 / noteSpeed), ()=> currentHeight -= 1)
+    	currentHeight += 1
+    	k.wait(70 / (1100 / noteSpeed), ()=> currentHeight -= 1)
 	})
 
 	k.onKeyPress(()=>{
-    k.add([
-      k.pos(0,0),
-      k.anchor("bot"),
-      k.rect((judgements.good / noteSpeed) * 1100 * 2, 100),
-      k.opacity(0),
-      k.fadeIn(0.2),
-      k.lifespan(0.4, {fade: 0.2})
-    ])
-  })
+		k.add([
+			k.pos(judgementLinePadding - 500,0),
+			k.anchor("center"),
+			k.rect(100, (judgements.good / noteSpeed) * 1100 * 2),
+			k.opacity(0),
+			k.fadeIn(0.2),
+			k.lifespan(0.1, {fade: 0.1})
+		])
+	})
 
-	player.loadFile(song)
+	const buffer = await fetch(songFile).then(res=>res.arrayBuffer())
+	player.loadArrayBuffer(buffer)
 	player.play()
 
 })
 
 k.scene("songSelect", ()=>{})
 k.scene("settings", ()=>{})
+
+k.go("game", "badApple.mid")
