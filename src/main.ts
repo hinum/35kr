@@ -10,35 +10,40 @@ const k = kaboom({
 const colors = Object.fromEntries(Object.entries(flavors.macchiato.colors).map(([name, color])=> [name, k.rgb(color.hex)]))
 
 type Judgements = {
-	great: number, // in ms
+	perfect: number, // in ms
 	good: number,
-	ok: number
 }
 
 let noteSpeed = 0.5 // s
-let judgementLinePadding = 100
+let notePaddingDist = 10
+let noteTravelDist = 600
+let startHiddingDist = 100
 let judgements: Judgements = {
-	great: 10,
-	good: 20,
-	ok: 40
+	perfect: 0.1,
+	good: 0.3,
+}
+
+function initScene(){
+	k.camPos(0,0)
+  k.onResize(()=>k.camScale(innerWidth/1000,innerWidth/1000))
+	k.setBackground(colors.base)
 }
 
 k.scene("game", async (songFile: string)=>{
-	k.camPos(0,0)
-	k.setBackground(colors.base)
+  initScene()
+  const inputHandles: (()=>boolean)[] = []
 	let currentHeight = 0
 
 	const player = new midi.Player((event: midi.Event)=>{
 		if (event.name !== "Note on") return
-
-		console.log(event.noteName)
+    const spawnTime = k.time()
 
 		const note = k.add([
 			k.circle(35),
 			k.pos(600, currentHeight * 70),
-			k.color(colors.overlay1), // TODO
-			k.move(k.LEFT, (1000 - judgementLinePadding)/noteSpeed),
-			k.lifespan(noteSpeed, )
+			k.color(colors.overlay1),
+			k.move(k.LEFT, noteTravelDist / noteSpeed),
+			k.lifespan(noteSpeed, { fade: (noteSpeed / noteTravelDist) *  startHiddingDist})
 		])
 
 		note.add([
@@ -47,15 +52,17 @@ k.scene("game", async (songFile: string)=>{
 			k.color(colors.text)
 		])
 
-    	currentHeight += 1
-    	k.wait(70 / (1100 / noteSpeed), ()=> currentHeight -= 1)
+    currentHeight += 1 // a black note after a white one could cause issues ( A# after A for example )
+    k.wait((noteSpeed / noteTravelDist) * notePaddingDist, ()=> currentHeight -= 1)
+    k.wait(noteSpeed, ()=>inputHandles.push(()=>{
+    }))
 	})
 
 	k.onKeyPress(()=>{
 		k.add([
-			k.pos(judgementLinePadding - 500,0),
+			k.pos( -300 ,0),
 			k.anchor("center"),
-			k.rect(100, (judgements.good / noteSpeed) * 1100 * 2),
+			k.rect(100, (noteTravelDist / noteSpeed) * judgements.good * 2),
 			k.opacity(0),
 			k.fadeIn(0.2),
 			k.lifespan(0.1, {fade: 0.1})
