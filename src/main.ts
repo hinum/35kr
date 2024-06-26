@@ -1,6 +1,7 @@
 import { flavors } from "@catppuccin/palette";
 import kaboom, { Color, Key } from "kaboom";
 import * as midi from "midi-player-js";
+import { instrument } from "soundfont-player";
 
 const k = kaboom({
 	width: 1000,
@@ -14,8 +15,8 @@ type JudgementWindows = {
 	good: number,
 }
 
-let noteSpeed = 1 // s
-let noteTravelDist = 800
+let noteSpeed = 2 // s
+let noteTravelDist = 900
 let bgTranspart = 0.6
 
 let judgementWindow: JudgementWindows = {
@@ -72,13 +73,23 @@ function keyToColor(notePitch: number){
 	][octave]
 }
 
+type Judgements = "perfect" | "good" | "miss"
+function getJudgementColor(judgement: Judgements){
+	switch (judgement){
+		case "perfect": return colors.sapphire
+		case "good": return colors.green
+		case "miss": return colors.overlay0
+	}
+}
+
 k.scene("game", async (songFile: string)=>{
-	initScene()
+	initScene() 
+	const paino = await instrument(k.audioCtx, "acoustic_grand_piano")
 	let currentHeight = 0
 
 	const judgementText = k.add([
 		k.text(""),
-		k.pos(0, -80),
+		k.pos(0, -110),
 		k.color(),
 		k.anchor("top")
 	])
@@ -89,13 +100,18 @@ k.scene("game", async (songFile: string)=>{
 		k.color(),
 		k.anchor("bot")
 	])
-	function registerJudgement(judgement: "good" | "perfect" | "miss"){
+	function registerJudgement(time: number, judgement: Judgements){
 		judgementText.text = judgement
-		switch (judgement){
-			case "good": judgementText.color = colors.green; break;
-			case "perfect": judgementText.color = colors.sapphire; break;
-			case "miss": judgementText.color = colors.overlay0
-		}
+		judgementText.color = getJudgementColor(judgement)
+		k.add([
+			k.rect(5,20, {radius:2.5}),
+			k.lifespan(1, {fade: 0.5}),
+			k.anchor("bot"),
+			k.opacity(0.75),
+			k.pos((time - judgementWindow.good) / judgementWindow.good * 100 ,-50),
+			k.color(getJudgementColor(judgement))
+		])
+		
 		if (judgement != "miss") combo ++
 		else combo = 0
 
@@ -103,8 +119,8 @@ k.scene("game", async (songFile: string)=>{
 	}
 
 	const player = new midi.Player(async (event: midi.Event)=>{
-
 		if (event.name !== "Note on") return
+		console.log(event.noteName)
 		const spawnTime = k.time()
 
 		const note = k.add([
@@ -113,7 +129,7 @@ k.scene("game", async (songFile: string)=>{
 			k.pos( 600, currentHeight * 70 ),
 			k.color(keyToColor(event.noteNumber ?? 0)),
 			k.move(k.LEFT, noteTravelDist / noteSpeed),
-			k.lifespan(noteSpeed - judgementWindow.good , { fade: 0.1 })
+			k.lifespan(noteSpeed  , { fade: 0 })
 		])
 
 		note.add([
@@ -132,22 +148,39 @@ k.scene("game", async (songFile: string)=>{
 		currentHeight += 1 // a black note after a white one could cause issues ( A# after A for example )
 
 		await k.wait(noteSpeed)
-		let time = await waitForInput(judgementWindow.good * 2, keyToLetter(event.noteNumber ?? 0)) // TODO
+		let time = await waitForInput(judgementWindow.good * 2, keyToLetter(event.noteNumber ?? 0))
+		const rawTime = time
+
 		if (time < judgementWindow.good) time = judgementWindow.good - time
 		else time -= judgementWindow.good
 
-		if (time < judgementWindow.perfect) return registerJudgement("perfect")
-		if (time < judgementWindow.good) return registerJudgement("good")
-		return registerJudgement("miss")
+		if (time > judgementWindow.good) return registerJudgement(rawTime, "miss")
+		if (time < judgementWindow.perfect) registerJudgement(rawTime, "perfect")
+		else registerJudgement(rawTime, "good")
+		paino.play(event.noteName ?? "")
 	})
 
 	const buffer = await fetch(songFile).then(res=>res.arrayBuffer())
+	k.add([
+		k.rect(10, 100000),
+		k.color(colors.surface0),
+		k.pos(600 - noteTravelDist - 35, 0),
+		k.anchor("left"),
+		k.opacity(0),
+		k.fadeIn(0.5)
+	])
+	k.onKeyPress("backspace", ()=>{
+		k.go("game", songFile)
+		player.stop()
+	})
+
 	player.loadArrayBuffer(buffer)
 	player.play()
 
 })
 
+k.scene("songResult", ()=>{})
 k.scene("songSelect", ()=>{})
 k.scene("settings", ()=>{})
 
-k.go("game", "Untitled.mid")
+k.go("game", "Mary Had a Little Lamb.mid")
