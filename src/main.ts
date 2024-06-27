@@ -187,4 +187,4 @@ k.scene("game", async (songFile: string)=>{
 })
 
 
-k.go("game", "Mary Had a Little Lamb.mid")
+k.go("game", "mary lamb.mid")
