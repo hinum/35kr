@@ -8,20 +8,20 @@ const k = kaboom({
 	scale: innerWidth / 1000,
 })
 
+const print = <T>(inp: T)=> {
+	console.log(inp)
+	return inp
+}
 const colors = Object.fromEntries(Object.entries(flavors.macchiato.colors).map(([name, color])=> [name, k.rgb(color.hex)]))
 
-type JudgementWindows = {
-	perfect: number, // in ms
-	good: number,
-}
-
-let noteSpeed = 2 // s
+let noteSpeed = 1 // s
 let noteTravelDist = 900
 let bgTranspart = 0.6
 
-let judgementWindow: JudgementWindows = {
+let judgementWindow = {
 	perfect: 0.05,
 	good: 0.15,
+	miss: 0.2,
 }
 
 function initScene(){
@@ -29,15 +29,6 @@ function initScene(){
   	k.onResize(()=>k.camScale(innerWidth/1000,innerWidth/1000))
 	k.setBackground(colors.base)
 }
-
-const waitForInput = (timeout:number, chacracter: Key)=>new Promise<number>(async (res, fail)=>{
-	const startTime = k.time()
-	const collector = k.onKeyPress(chacracter, ()=>res(k.time() - startTime))
-
-	await k.wait(timeout)
-	collector.cancel()
-	res(999999)
-})
 
 const keyOrder = [
 	"  1234",
@@ -108,7 +99,7 @@ k.scene("game", async (songFile: string)=>{
 			k.lifespan(1, {fade: 0.5}),
 			k.anchor("bot"),
 			k.opacity(0.75),
-			k.pos((time - judgementWindow.good) / judgementWindow.good * 100 ,-50),
+			k.pos((time - judgementWindow.miss) / judgementWindow.miss * -100 ,-50),
 			k.color(getJudgementColor(judgement))
 		])
 		
@@ -118,9 +109,23 @@ k.scene("game", async (songFile: string)=>{
 		comboText.text = combo.toString()
 	}
 
+	const resloves: Partial<Record<Key, (()=>void)[]>> = {}
+	async function waitForInput(timeout: number, key: Key){
+		const startTime = k.time()
+		resloves[key] ??= []
+
+		await Promise.race([
+			new Promise<void>(res=> resloves[key]!.push(res)),
+			k.wait(timeout)
+		])
+
+		resloves[key]!.shift()
+		return k.time() - startTime
+	}
+	k.onKeyPress(key=> print(resloves[key])?.[0]?.())
+
 	const player = new midi.Player(async (event: midi.Event)=>{
 		if (event.name !== "Note on") return
-		console.log(event.noteName)
 		const spawnTime = k.time()
 
 		const note = k.add([
@@ -129,7 +134,7 @@ k.scene("game", async (songFile: string)=>{
 			k.pos( 600, currentHeight * 70 ),
 			k.color(keyToColor(event.noteNumber ?? 0)),
 			k.move(k.LEFT, noteTravelDist / noteSpeed),
-			k.lifespan(noteSpeed  , { fade: 0 })
+			k.lifespan(noteSpeed * 2)
 		])
 
 		note.add([
@@ -147,12 +152,13 @@ k.scene("game", async (songFile: string)=>{
 		if (currentHeight === 0) k.wait((noteSpeed / noteTravelDist) * 90, ()=> currentHeight = 0)
 		currentHeight += 1 // a black note after a white one could cause issues ( A# after A for example )
 
-		await k.wait(noteSpeed)
-		let time = await waitForInput(judgementWindow.good * 2, keyToLetter(event.noteNumber ?? 0))
+		await k.wait(noteSpeed - judgementWindow.miss)
+		let time = await waitForInput(judgementWindow.miss * 2, keyToLetter(event.noteNumber ?? 0))
 		const rawTime = time
 
-		if (time < judgementWindow.good) time = judgementWindow.good - time
-		else time -= judgementWindow.good
+		if (rawTime < judgementWindow.miss + judgementWindow.good) note.destroy()
+		if (time < judgementWindow.miss) time = judgementWindow.miss - time
+		else time -= judgementWindow.miss
 
 		if (time > judgementWindow.good) return registerJudgement(rawTime, "miss")
 		if (time < judgementWindow.perfect) registerJudgement(rawTime, "perfect")
@@ -162,15 +168,16 @@ k.scene("game", async (songFile: string)=>{
 
 	const buffer = await fetch(songFile).then(res=>res.arrayBuffer())
 	k.add([
-		k.rect(10, 100000),
+		k.rect(70, 100000),
 		k.color(colors.surface0),
-		k.pos(600 - noteTravelDist - 35, 0),
-		k.anchor("left"),
+		k.pos(600 - noteTravelDist, 0),
+		k.anchor("center"),
 		k.opacity(0),
 		k.fadeIn(0.5)
 	])
 	k.onKeyPress("backspace", ()=>{
 		k.go("game", songFile)
+		k.camScale(innerWidth/1000, innerWidth/1000)
 		player.stop()
 	})
 
@@ -179,8 +186,5 @@ k.scene("game", async (songFile: string)=>{
 
 })
 
-k.scene("songResult", ()=>{})
-k.scene("songSelect", ()=>{})
-k.scene("settings", ()=>{})
 
 k.go("game", "Mary Had a Little Lamb.mid")
