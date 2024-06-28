@@ -1,5 +1,5 @@
 import { flavors } from "@catppuccin/palette";
-import kaboom, { Key } from "kaboom";
+import kaboom, { Color, Key } from "kaboom";
 import * as midi from "midi-player-js";
 import { instrument } from "soundfont-player";
 
