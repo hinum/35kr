@@ -31,7 +31,7 @@ function initScene(){
 }
 
 const keyOrder = [
-	"  1234",
+	"    34",
 	"56zxcv",
 	"asdfgh",
 	"qwerty",
@@ -42,14 +42,14 @@ const keyOrder = [
 ] as const
 
 function keyToLetter(notePitch: number){
-	const clampedNote = k.clamp(notePitch, 16, 105) - 12
+	const clampedNote = k.clamp(notePitch, 18, 105) - 12
 	const octave = Math.floor( clampedNote / 12)
 	const note = Math.floor((clampedNote % 12) / 2)
 
 	return keyOrder[octave][note] as Key
 }
 function keyToColor(notePitch: number){
-	const clampedNote = k.clamp(notePitch, 16, 105) - 12
+	const clampedNote = k.clamp(notePitch, 18, 105) - 12
 	const octave = Math.floor( clampedNote / 12)
 
 	return [
@@ -73,7 +73,13 @@ function getJudgementColor(judgement: Judgements){
 	}
 }
 
-k.scene("game", async (songFile: string)=>{
+const waitforfileinput = ()=> new Promise<ArrayBuffer>(async res=>{
+	const elem = document.querySelector("input") as HTMLInputElement
+	elem.addEventListener("change", ()=> res(elem.files?.item(0)?.arrayBuffer()!))
+	elem.click()
+})
+
+k.scene("game", async (buffer: ArrayBuffer)=>{
 	initScene() 
 	const paino = await instrument(k.audioCtx, "acoustic_grand_piano")
 	let currentHeight = 0
@@ -166,7 +172,12 @@ k.scene("game", async (songFile: string)=>{
 		paino.play(event.noteName ?? "")
 	})
 
-	const buffer = await fetch(songFile).then(res=>res.arrayBuffer())
+	k.onKeyPress("1", ()=>k.debug.log(noteSpeed += 0.1))
+	k.onKeyPress("2", ()=>k.debug.log(noteSpeed -= 0.1))
+
+	await waitForInput(10000000, "space")
+	buffer = await waitforfileinput()
+
 	k.add([
 		k.rect(70, 100000),
 		k.color(colors.surface0),
@@ -176,7 +187,7 @@ k.scene("game", async (songFile: string)=>{
 		k.fadeIn(0.5)
 	])
 	k.onKeyPress("backspace", ()=>{
-		k.go("game", songFile)
+		k.go("game", buffer)
 		k.camScale(innerWidth/1000, innerWidth/1000)
 		player.stop()
 	})
@@ -187,4 +198,4 @@ k.scene("game", async (songFile: string)=>{
 })
 
 
-k.go("game", "Mary Had a Little Lamb.mid")
+k.go("game")
