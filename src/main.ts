@@ -21,7 +21,7 @@ let bgTranspart = 0.6
 let judgementWindow = {
 	perfect: 0.05,
 	good: 0.15,
-	miss: 0.2,
+	miss: 0.4,
 }
 
 function initScene(){
@@ -79,7 +79,7 @@ const waitforfileinput = ()=> new Promise<ArrayBuffer>(async res=>{
 	elem.click()
 })
 
-k.scene("game", async (buffer: ArrayBuffer)=>{
+k.scene("game", async (buffer: ArrayBuffer, isauto: boolean = false)=>{
 	initScene() 
 	const paino = await instrument(k.audioCtx, "acoustic_grand_piano")
 	let currentHeight = 0
@@ -91,6 +91,12 @@ k.scene("game", async (buffer: ArrayBuffer)=>{
 		k.anchor("top")
 	])
 	let combo = 0
+	let maxcombo = 0
+	const keyPresses: Record<Judgements, number> = {
+		good: 0,
+		miss: 0,
+		perfect: 0
+	}
 	const comboText =  judgementText.add([
 		k.text("", {size : 20}),
 		k.pos(0, -5),
@@ -112,6 +118,9 @@ k.scene("game", async (buffer: ArrayBuffer)=>{
 		if (judgement != "miss") combo ++
 		else combo = 0
 
+		maxcombo = Math.max(combo, maxcombo)
+
+		keyPresses[judgement] ++
 		comboText.text = combo.toString()
 	}
 
@@ -120,7 +129,8 @@ k.scene("game", async (buffer: ArrayBuffer)=>{
 		const startTime = k.time()
 		resloves[key] ??= []
 
-		await Promise.race([
+		if (isauto) await k.wait(timeout / 2)
+		else await Promise.race([
 			new Promise<void>(res=> resloves[key]!.push(res)),
 			k.wait(timeout)
 		])
@@ -132,7 +142,6 @@ k.scene("game", async (buffer: ArrayBuffer)=>{
 
 	const player = new midi.Player(async (event: midi.Event)=>{
 		if (event.name !== "Note on") return
-		const spawnTime = k.time()
 
 		const note = k.add([
 			k.opacity(bgTranspart),
@@ -172,30 +181,77 @@ k.scene("game", async (buffer: ArrayBuffer)=>{
 		paino.play(event.noteName ?? "")
 	})
 
-	k.onKeyPress("1", ()=>k.debug.log(noteSpeed += 0.1))
-	k.onKeyPress("2", ()=>k.debug.log(noteSpeed -= 0.1))
+	const addPop = (txt: string, color: Color)=>k.add([
+		k.opacity(1),
+		k.text(txt),
+		k.pos(0,0),
+		k.anchor('center'),
+		k.color(color),
+		k.lifespan(0.2, {fade: 0.8}),
+		{
+			velocity: -100,
+			update(){
+				(this as any).pos.y += (this as any).velocity * k.dt();
+				(this as any).velocity += 1000 * k.dt() 
+			}
+		}
+	])
+	k.onKeyPress("1", ()=>addPop((noteSpeed += 0.1).toString(), colors.red))
+	k.onKeyPress("2", ()=>addPop((noteSpeed -= 0.1).toString(), colors.green))
+	k.onKeyPress("3", ()=>addPop((isauto = !isauto)? "true": "false", colors.text))
 
-	await waitForInput(10000000, "space")
-	buffer = await waitforfileinput()
+	if (buffer === undefined){
+		await waitForInput(10000000, "space")
+		buffer = await waitforfileinput()
+	}
 
 	k.add([
 		k.rect(70, 100000),
 		k.color(colors.surface0),
 		k.pos(600 - noteTravelDist, 0),
-		k.anchor("center"),
+		k.anchor("right"),
 		k.opacity(0),
 		k.fadeIn(0.5)
 	])
 	k.onKeyPress("backspace", ()=>{
-		k.go("game", buffer)
+		k.go("game", buffer, isauto)
 		k.camScale(innerWidth/1000, innerWidth/1000)
 		player.stop()
 	})
+
+	player.on("endOfFile", ()=>k.wait(2, ()=>k.go('result', keyPresses, maxcombo, buffer)))
 
 	player.loadArrayBuffer(buffer)
 	player.play()
 
 })
 
+k.scene("result", (keys: Record<Judgements, number>, maxcombo: number, buffer: ArrayBuffer)=>{
+	initScene()
+	k.add([
+		k.text("perfect | " + keys.perfect),
+		k.color(colors.sapphire),
+		k.pos(0,-200),
+		k.anchor("center")
+	]).add([
+		k.text("good | " + keys.good),
+		k.pos(0, 200/3),
+		k.color(colors.green),
+		k.anchor("center")
+	]).add([
+		k.text("miss | " + keys.miss),
+		k.pos(0, 200/3),
+		k.color(colors.red),
+		k.anchor("center")
+	]).add([
+		k.text("maxcombo | " + maxcombo),
+		k.pos(0, 200/3),
+		k.color(colors.text),
+		k.anchor("center")
+	])
+
+
+	k.onKeyPress('backspace', ()=> k.go("game", buffer))
+})
 
 k.go("game")
