@@ -73,9 +73,10 @@ function getJudgementColor(judgement: Judgements){
 	}
 }
 
-const waitforfileinput = ()=> new Promise<ArrayBuffer>(async res=>{
+const waitforfileinput = ()=> new Promise<ArrayBuffer | false>(async res=>{
 	const elem = document.querySelector("input") as HTMLInputElement
 	elem.addEventListener("change", ()=> res(elem.files?.item(0)?.arrayBuffer()!))
+	elem.addEventListener("cancel", ()=> res(false))
 	elem.click()
 })
 
@@ -200,10 +201,11 @@ k.scene("game", async (buffer: ArrayBuffer, isauto: boolean = false)=>{
 	k.onKeyPress("2", ()=>addPop((noteSpeed -= 0.1).toString(), colors.green))
 	k.onKeyPress("3", ()=>addPop((isauto = !isauto)? "true": "false", colors.text))
 
-	if (buffer === undefined){
+	async function trytoload(): Promise<ArrayBuffer> {
 		await waitForInput(10000000, "space")
-		buffer = await waitforfileinput()
+		return await waitforfileinput() || await trytoload()
 	}
+	buffer ??= await trytoload()
 
 	k.add([
 		k.rect(70, 100000),
